@@ -64,25 +64,46 @@ ExchangeClient::~ExchangeClient() {
 }
 
 void ExchangeClient::connect() {
-    websocketpp::lib::error_code ec;
-    std::string uri = (Config::USE_SSL ? "wss://" : "ws://") + m_uri;
-    
-    if (Config::USE_SSL) {
-        auto con = m_ssl_client->get_connection(uri, ec);
-        if (ec) {
-            logger("Failed to create SSL connection: " + ec.message());
-            return;
+    try {
+        websocketpp::lib::error_code ec;
+        std::string uri = (Config::USE_SSL ? "wss://" : "ws://") + m_uri;
+        
+        logger("Attempting to connect to: " + uri);
+        
+        if (Config::USE_SSL) {
+            logger("Creating SSL connection...");
+            auto con = m_ssl_client->get_connection(uri, ec);
+            if (ec) {
+                logger("Failed to create SSL connection: " + ec.message());
+                return;
+            }
+            logger("Connecting SSL client...");
+            m_ssl_client->connect(con);
+            logger("Starting SSL client event loop...");
+            m_ssl_client->run();
+            logger("SSL client event loop ended");
+        } else {
+            logger("Creating non-SSL connection...");
+            auto con = m_non_ssl_client->get_connection(uri, ec);
+            if (ec) {
+                logger("Failed to create non-SSL connection: " + ec.message());
+                return;
+            }
+            logger("Connecting non-SSL client...");
+            m_non_ssl_client->connect(con);
+            logger("Starting non-SSL client event loop...");
+            std::cout.flush(); // Force flush before blocking call
+            m_non_ssl_client->run();
+            logger("Non-SSL client event loop ended");
         }
-        m_ssl_client->connect(con);
-        m_ssl_client->run();
-    } else {
-        auto con = m_non_ssl_client->get_connection(uri, ec);
-        if (ec) {
-            logger("Failed to create non-SSL connection: " + ec.message());
-            return;
-        }
-        m_non_ssl_client->connect(con);
-        m_non_ssl_client->run();
+    } catch (const std::exception& e) {
+        logger("Exception in connect(): " + std::string(e.what()));
+        std::cerr << "FATAL ERROR: " << e.what() << std::endl;
+        std::cerr.flush();
+    } catch (...) {
+        logger("Unknown exception in connect()");
+        std::cerr << "FATAL ERROR: Unknown exception" << std::endl;
+        std::cerr.flush();
     }
 }
 
@@ -108,11 +129,11 @@ void ExchangeClient::disconnect() {
     }
 }
 
-std::shared_ptr<boost::asio::ssl::context> ExchangeClient::tls_init_handler() {
-    std::shared_ptr<boost::asio::ssl::context> ctx = std::make_shared<boost::asio::ssl::context>(boost::asio::ssl::context::tlsv12_client);
+std::shared_ptr<asio::ssl::context> ExchangeClient::tls_init_handler() {
+    std::shared_ptr<asio::ssl::context> ctx = std::make_shared<asio::ssl::context>(asio::ssl::context::tlsv12_client);
     try {
-        boost::system::error_code ec;
-        ctx->set_options(boost::asio::ssl::context::default_workarounds, ec);
+        asio::error_code ec;
+        ctx->set_options(asio::ssl::context::default_workarounds, ec);
         if (ec) {
             std::cout << "Error setting SSL options: " << ec.message() << std::endl;
         }

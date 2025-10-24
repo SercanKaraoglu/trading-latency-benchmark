@@ -71,8 +71,8 @@ jobs:
           path: mock-trading-server/target/release/mock-trading-server
           retention-days: 7
 
-  cpp-client:
-    name: Build C++ Client
+  cpp-client-linux:
+    name: Build C++ Client (Linux)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -100,8 +100,58 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: cpp-client-binary
+          name: cpp-client-linux-binary
           path: cpp-client/build/*
+          retention-days: 7
+
+  cpp-client-windows:
+    name: Build C++ Client (Windows)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: cpp-client
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      
+      - name: Setup vcpkg
+        run: |
+          git clone https://github.com/Microsoft/vcpkg.git ../vcpkg
+          cd ../vcpkg
+          .\bootstrap-vcpkg.bat
+          .\vcpkg integrate install
+      
+      - name: Install dependencies
+        run: |
+          cd ../vcpkg
+          .\vcpkg install openssl:x64-windows zlib:x64-windows
+      
+      - name: Configure CMake
+        shell: bash
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake
+      
+      - name: Build
+        run: cmake --build build --config Release
+      
+      - name: Copy DLLs
+        shell: bash
+        run: |
+          cp ../vcpkg/installed/x64-windows/bin/libssl-3-x64.dll build/Release/
+          cp ../vcpkg/installed/x64-windows/bin/libcrypto-3-x64.dll build/Release/
+          cp "C:/Windows/System32/msvcp140.dll" build/Release/ || true
+          cp "C:/Windows/System32/vcruntime140.dll" build/Release/ || true
+          cp "C:/Windows/System32/vcruntime140_1.dll" build/Release/ || true
+      
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpp-client-windows-binary
+          path: cpp-client/build/Release/*.dll cpp-client/build/Release/*.exe
           retention-days: 7
 
   cdk-infrastructure:
